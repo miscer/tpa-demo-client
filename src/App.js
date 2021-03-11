@@ -1,13 +1,24 @@
-import { BrowserRouter as Router, Link, Route, Switch } from "react-router-dom";
+import { BrowserRouter as Router, Route, Switch } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { finishAuth, getAuthUrl } from "./api";
 
 function App() {
+  const [result, setResult] = useState(null);
+  const logOut = () => setResult(null);
+
   return (
     <Router>
       <Switch>
-        <Route path="/auth/:provider" component={AuthCallback} />
-        <Route path="/" component={LoginForm} />
+        <Route
+          path="/auth/:provider"
+          render={(props) => <AuthCallback {...props} onFinish={setResult} />}
+        />
+        <Route
+          path="/"
+          render={(props) => (
+            <Content {...props} result={result} onLogOut={logOut} />
+          )}
+        />
       </Switch>
     </Router>
   );
@@ -15,7 +26,17 @@ function App() {
 
 const redirectUrl = window.location.origin + "/auth/facebook";
 
-function LoginForm(props) {
+function Content(props) {
+  const { result, onLogOut } = props;
+
+  if (result == null) {
+    return <LoginForm />;
+  }
+
+  return <Result {...result} onLogOut={onLogOut} />;
+}
+
+function LoginForm() {
   const logInWithFacebook = async () => {
     const { authUrl, state } = await getAuthUrl(redirectUrl);
     localStorage.setItem("state", state);
@@ -27,34 +48,6 @@ function LoginForm(props) {
       <button onClick={logInWithFacebook}>Log in with Facebook</button>
     </div>
   );
-}
-
-function AuthCallback(props) {
-  const state = localStorage.getItem("state");
-  const params = useMemo(() => {
-    const search = new URLSearchParams(props.location.search);
-    return Object.fromEntries(search.entries());
-  }, [props.location.search]);
-  const [result, setResult] = useState(null);
-
-  const handleCallback = async (state, params) => {
-    const result = await finishAuth(redirectUrl, state, params);
-    setResult(result);
-  };
-
-  useEffect(() => {
-    handleCallback(state, params);
-  }, [state, params]);
-
-  if (result == null) {
-    return (
-      <div>
-        <p>Loading...</p>
-      </div>
-    );
-  }
-
-  return <Result {...result} />;
 }
 
 function Result(props) {
@@ -72,10 +65,6 @@ function Result(props) {
             <button onClick={retry}>Try again</button>
           </p>
         ) : null}
-
-        <p>
-          <Link to="/">Back</Link>
-        </p>
       </div>
     );
   }
@@ -84,8 +73,35 @@ function Result(props) {
     <div>
       <p>Email: {props.email}</p>
       <p>
-        <Link to="/">Back</Link>
+        <button onClick={() => props.onLogOut()}>Log out</button>
       </p>
+    </div>
+  );
+}
+
+function AuthCallback(props) {
+  const { onFinish, location, history } = props;
+
+  const state = localStorage.getItem("state");
+  const params = useMemo(() => {
+    const search = new URLSearchParams(location.search);
+    return Object.fromEntries(search.entries());
+  }, [location.search]);
+
+  const handleCallback = async (state, params) => {
+    const result = await finishAuth(redirectUrl, state, params);
+    onFinish(result);
+
+    history.replace("/");
+  };
+
+  useEffect(() => {
+    handleCallback(state, params);
+  }, [state, params]);
+
+  return (
+    <div>
+      <p>Loading...</p>
     </div>
   );
 }
